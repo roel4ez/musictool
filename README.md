@@ -1,91 +1,79 @@
-# MusicTool
+# MusicTool 🎵
 
-This repository aims to create a music management tool for personal use. The main source of music will be from the Traktor Pro 3 library, which will be used to manage and organize a music collection. In the future, the tool will also allow for the import of music from other sources, such as Bandcamp, and will provide a way to manage and organize that music as well.
+A music collection manager that bridges physical and digital collections. Identifies gaps between your vinyl releases (Discogs) and digital tracks (Traktor NML) using fuzzy matching and API integration.
 
 ## Features
 
-- Show list of music files, including metadata
-- Join metadata with data from Discogs, currently available in a local database
-- Allow to lookup metadata from Discogs
-- Allow to edit metadata
-- Allow to lookup availability of music on Bandcamp or Beatport
+- **Collection Analysis**: Parse Traktor NML files and Discogs CSV exports
+- **Gap Detection**: Find which vinyl tracks are missing from your digital collection
+- **API Integration**: Expand Discogs releases into individual tracks via API
+- **Interactive UI**: Beautiful Streamlit web interface with filtering and charts
+- **Data Export**: Export gap analysis results and collection data
 
-See [Project Description](docs/project-description.md) for more details.
+## Quick Start
 
-## Development Setup
+### 1. Setup Environment
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-### Prerequisites
-
-- Node.js (v16 or later)
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/MusicTool.git
-   cd MusicTool
-   ```
-
-2. Install dependencies:
-   ```
-   npm install
-   ```
-   or
-   ```
-   yarn
-   ```
-
-3. Build the TypeScript code:
-   ```
-   npm run build
-   ```
-   or
-   ```
-   yarn build
-   ```
-
-4. Start the application:
-   ```
-   npm start
-   ```
-   or
-   ```
-   yarn start
-   ```
-
-### Development Mode
-
-To run the application in development mode with DevTools enabled:
-
-```
-npm run dev
-```
-or
-```
-yarn dev
+# Configure API key
+cp .env.example .env
+# Add your Discogs API key to .env file
 ```
 
-## Building for Distribution
+### 2. Test Individual Components
+```bash
+# Test NML parser (digital collection)
+python test_nml_parser.py
 
-To package the application for distribution:
+# Test Discogs CSV parser (physical collection)
+python test_discogs_parser.py
+
+# Test Discogs API client (rate limited)
+python test_discogs_api.py
+
+# Test collection expander (5 releases)
+python test_collection_expander.py
+
+# Test gap analysis
+python test_gap_analyzer.py
+```
+
+### 3. Expand Physical Collection
+```bash
+# Run full collection expansion (idempotent, resumable)
+python3 run_full_expansion.py
+
+# Monitor progress in separate terminal
+python3 monitor_expansion.py
+```
+
+### 4. Launch Streamlit App
+```bash
+# Start the web interface
+streamlit run src/python/ui/streamlit_app.py
+
+# Open browser to http://localhost:8501
+```
+
+## Data Sources
+
+- **Digital**: Traktor Pro NML collection files (`data/collection.nml`)
+- **Physical**: Discogs collection CSV export (`data/*.csv`)
+- **API**: Discogs API for release tracklist expansion
+
+## Architecture
 
 ```
-npm run dist
-```
-or
-```
-yarn dist
+NML Parser → Digital Collection (3,003 tracks)
+Discogs CSV + API → Physical Collection (expanded tracks) → Gap Analysis → Results
 ```
 
-This will create installers for your platform in the `release` directory.
+Built with Python, Streamlit, pandas, SQLite, and fuzzy matching.
 
-## Project Structure
+## Documentation
 
-- `/src` - Source code
-  - `/components` - React components
-  - `/utils` - Utility functions including NML parser
-  - `/types` - TypeScript type definitions
-- `/assets` - Static assets (icons, etc.)
-- `/dist` - Compiled JavaScript files
-- `/release` - Distribution packages
+- **[Collection Expansion Guide](docs/how-to/collection-expansion.md)** - Complete guide to expanding your Discogs collection
+- **[Project Vision](docs/project-description.md)** - Original project goals and requirements
+- **[Architecture Decisions](docs/adrs/)** - Technical decisions and rationale

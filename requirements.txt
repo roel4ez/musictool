@@ -1,0 +1,32 @@
+# MusicTool MVP Dependencies
+# Core Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# UI Framework
+streamlit>=1.28.0
+plotly>=5.17.0
+
+# HTTP Requests & API
+requests>=2.31.0
+requests-ratelimiter>=0.4.0
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# XML Parsing (for NML files)
+lxml>=4.9.0
+
+# String Matching & Fuzzy Search
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.21.0
+
+# Data Storage
+# sqlite3 is built into Python - no need to install
+
+# Development & Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: Performance improvements
+# pyarrow>=13.0.0  # For faster parquet I/O if we choose that format
