@@ -25,6 +25,7 @@ from src.python.core.discogs_parser import DiscogsCSVParser
 from src.python.core.discogs_client import load_api_key_from_env
 from src.python.core.collection_expander import CollectionExpander
 from src.python.core.gap_analyzer_fast import FastGapAnalyzer
+from src.python.core.duplicate_finder import DuplicateFinder
 
 # Page configuration
 st.set_page_config(
@@ -102,7 +103,7 @@ def main():
     st.sidebar.title("🎛️ Navigation")
     page = st.sidebar.selectbox(
         "Choose a page:",
-        ["🏠 Dashboard", "💿 Digital Collection", "📀 Physical Collection", "🔍 Gap Analysis", "⚙️ Tools"]
+        ["🏠 Dashboard", "💿 Digital Collection", "📀 Physical Collection", "🔍 Gap Analysis", "🔄 Duplicate Finder", "⚙️ Tools"]
     )
     
     # Load collections
@@ -118,6 +119,8 @@ def main():
         show_physical_collection(physical_df)
     elif page == "🔍 Gap Analysis":
         show_gap_analysis(digital_df, physical_df)
+    elif page == "🔄 Duplicate Finder":
+        show_duplicate_finder(digital_df)
     elif page == "⚙️ Tools":
         show_tools()
 
@@ -549,6 +552,254 @@ def show_gap_analysis(digital_df, physical_df):
                         st.success("🎉 All physical tracks found in digital collection!")
         else:
             st.info("Click 'Run Analysis' to start the gap analysis.")
+
+
+def show_duplicate_finder(digital_df):
+    """Show duplicate finder for digital collection."""
+    st.header("🔄 Duplicate Finder")
+    
+    if digital_df.empty:
+        st.warning("Digital collection is needed for duplicate detection.")
+        return
+    
+    st.info(f"🎵 Scanning {len(digital_df):,} tracks in your digital collection for potential duplicates")
+    
+    # Duplicate detection options
+    st.subheader("⚙️ Detection Settings")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        similarity_threshold = st.slider(
+            "Similarity Threshold", 
+            60, 95, 85, 5,
+            help="Higher values = more strict matching (fewer false positives)"
+        )
+        st.caption(f"Tracks with {similarity_threshold}%+ similarity will be considered duplicates")
+    
+    with col2:
+        detection_method = st.selectbox(
+            "Detection Method",
+            [
+                "artist_title", 
+                "title_only", 
+                "filename", 
+                "duration"
+            ],
+            format_func=lambda x: {
+                "artist_title": "🎵 Artist + Title (recommended)",
+                "title_only": "🎼 Title Only",
+                "filename": "📁 Filename Similarity", 
+                "duration": "⏱️ Duration + Title"
+            }[x]
+        )
+    
+    # Method descriptions
+    method_descriptions = {
+        "artist_title": "Compares both artist and title using fuzzy matching. Most reliable for finding true duplicates.",
+        "title_only": "Only compares track titles. Good for finding covers or different versions of the same song.",
+        "filename": "Compares file names. Useful for finding files with similar naming patterns.",
+        "duration": "Combines title similarity with track duration. Good for identifying identical recordings."
+    }
+    
+    st.caption(f"ℹ️ {method_descriptions[detection_method]}")
+    
+    # Performance estimate
+    estimated_comparisons = (len(digital_df) * (len(digital_df) - 1)) // 2
+    estimated_time = estimated_comparisons / 10000  # Very rough estimate
+    
+    if estimated_time > 60:
+        st.warning(f"⚠️ Large collection detected. Estimated processing time: {estimated_time/60:.1f} minutes")
+    else:
+        st.info(f"📊 Will perform ~{estimated_comparisons:,} comparisons (estimated time: {estimated_time:.1f}s)")
+    
+    # Run duplicate detection
+    if st.button(f"🔍 Find Duplicates", type="primary"):
+        
+        # Progress tracking
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            status_text.text("🔄 Initializing Duplicate Finder...")
+            finder = DuplicateFinder("./data/collection.nml")
+            
+            status_text.text("🔍 Analyzing tracks for duplicates...")
+            progress_bar.progress(0.3)
+            
+            # Run duplicate detection
+            duplicates_df = finder.find_duplicates(
+                similarity_threshold=similarity_threshold,
+                group_by=detection_method
+            )
+            
+            progress_bar.progress(1.0)
+            status_text.text("✅ Duplicate detection complete!")
+            
+            # Store results in session state
+            st.session_state.duplicates_results = duplicates_df
+            st.session_state.duplicate_stats = finder.get_duplicate_stats(duplicates_df)
+            st.session_state.duplicate_config = {
+                'threshold': similarity_threshold,
+                'method': detection_method,
+                'total_tracks': len(digital_df)
+            }
+            
+        except Exception as e:
+            st.error(f"❌ Error during duplicate detection: {e}")
+            return
+    
+    # Display results if available
+    if 'duplicates_results' in st.session_state:
+        duplicates_df = st.session_state.duplicates_results
+        stats = st.session_state.duplicate_stats
+        config = st.session_state.duplicate_config
+        
+        if not duplicates_df.empty:
+            st.success(f"🎯 Found {stats['total_groups']} duplicate groups with {stats['total_duplicate_tracks']} duplicate tracks!")
+            
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric("Duplicate Groups", stats['total_groups'])
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown('<div class="metric-card danger-metric">', unsafe_allow_html=True)
+                st.metric("Duplicate Tracks", stats['total_duplicate_tracks'])
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown('<div class="metric-card warning-metric">', unsafe_allow_html=True)
+                st.metric("Space to Save", f"{stats['potential_space_saved_mb']:.0f} MB")
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col4:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric("Avg Similarity", f"{stats['average_similarity']:.1f}%")
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Results tabs
+            tab1, tab2, tab3 = st.tabs(["📊 All Duplicates", "🔍 By Group", "📈 Statistics"])
+            
+            with tab1:
+                st.subheader("Complete Duplicate Results")
+                
+                # Color-code by group
+                def color_by_group(row):
+                    if row['status'] == 'original':
+                        return ['background-color: #d4edda'] * len(row)
+                    else:
+                        colors = ['#f8d7da', '#fff3cd', '#d1ecf1', '#e2e3e5', '#f8f9fa']
+                        color_idx = (row['group_id'] - 1) % len(colors)
+                        return [f'background-color: {colors[color_idx]}'] * len(row)
+                
+                display_cols = ['group_id', 'rank', 'status', 'similarity', 'artist', 'title', 'album', 'duration', 'filetype']
+                
+                styled_df = duplicates_df[display_cols].style.apply(color_by_group, axis=1)
+                st.dataframe(styled_df, use_container_width=True, height=400)
+                
+                # Export options
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    duplicates_csv = duplicates_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download All Results",
+                        data=duplicates_csv,
+                        file_name=f"duplicates_all_{len(duplicates_df)}.csv",
+                        mime="text/csv"
+                    )
+                
+                with col2:
+                    duplicates_only = duplicates_df[duplicates_df['status'] == 'duplicate']
+                    if not duplicates_only.empty:
+                        duplicates_only_csv = duplicates_only.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Duplicates Only",
+                            data=duplicates_only_csv,
+                            file_name=f"duplicates_only_{len(duplicates_only)}.csv",
+                            mime="text/csv"
+                        )
+            
+            with tab2:
+                st.subheader("Duplicate Groups")
+                
+                # Group selector
+                group_ids = sorted(duplicates_df['group_id'].unique())
+                selected_group = st.selectbox("Select Group:", group_ids, format_func=lambda x: f"Group {x}")
+                
+                group_tracks = duplicates_df[duplicates_df['group_id'] == selected_group]
+                
+                st.write(f"**Group {selected_group}** - {len(group_tracks)} tracks")
+                
+                for idx, track in group_tracks.iterrows():
+                    status_icon = "🟢" if track['status'] == 'original' else "🔄"
+                    similarity_color = "green" if track['similarity'] >= 90 else "orange" if track['similarity'] >= 80 else "red"
+                    
+                    with st.expander(f"{status_icon} {track['artist']} - {track['title']} ({track['similarity']:.1f}%)"):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write("**Track Information:**")
+                            st.write(f"Artist: {track['artist']}")
+                            st.write(f"Title: {track['title']}")
+                            st.write(f"Album: {track['album']}")
+                            st.write(f"Genre: {track['genre']}")
+                            
+                        with col2:
+                            st.write("**File Information:**")
+                            st.write(f"Duration: {track['duration']/1000:.1f}s" if track['duration'] else "Unknown")
+                            st.write(f"Format: {track['filetype']}")
+                            st.write(f"Bitrate: {track['bitrate']}" if track['bitrate'] else "Unknown")
+                            st.write(f"Size: {track['filesize']/1024/1024:.1f} MB" if track['filesize'] else "Unknown")
+                        
+                        if track['location']:
+                            st.caption(f"📁 {track['location']}")
+            
+            with tab3:
+                st.subheader("Duplicate Statistics")
+                
+                # Top duplicate artists
+                if stats['top_duplicate_artists']:
+                    st.write("**🎤 Artists with Most Duplicates:**")
+                    for artist, count in stats['top_duplicate_artists'].items():
+                        st.write(f"• {artist}: {count} duplicates")
+                
+                # Top duplicate albums  
+                if stats['top_duplicate_albums']:
+                    st.write("**💿 Albums with Most Duplicates:**")
+                    for album, count in stats['top_duplicate_albums'].items():
+                        st.write(f"• {album}: {count} duplicates")
+                
+                # Format distribution
+                if stats['duplicate_formats']:
+                    st.write("**📁 Duplicate File Formats:**")
+                    format_df = pd.DataFrame(list(stats['duplicate_formats'].items()), 
+                                           columns=['Format', 'Count'])
+                    
+                    fig = px.pie(
+                        format_df, 
+                        values='Count', 
+                        names='Format',
+                        title="Duplicate Files by Format"
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Largest groups
+                if stats['largest_groups']:
+                    st.write("**📊 Largest Duplicate Groups:**")
+                    for group_id, size in stats['largest_groups'].items():
+                        st.write(f"• Group {group_id}: {size} tracks")
+        
+        else:
+            st.success("🎉 No duplicates found in your collection!")
+            st.balloons()
+    
+    else:
+        st.info("Click 'Find Duplicates' to start scanning your collection.")
 
 
 def show_tools():
